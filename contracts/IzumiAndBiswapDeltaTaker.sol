@@ -37,7 +37,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
   }
 
   // swap tokenX for tokenY in izumi
-  function swapX2Y(IiZiSwap.SwapParams memory params) internal onlyOwner returns (uint256) {
+  function swapX2Y(IiZiSwap.SwapParams memory params) internal returns (uint256) {
     address tokenX =  params.tokenX;
     address tokenY = params.tokenY;
     uint256 amount = params.amount;
@@ -76,7 +76,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
   }
 
   // swap tokenY for tokenX in izumi
-  function swapY2X(IiZiSwap.SwapParams memory params) internal onlyOwner returns (uint256) {
+  function swapY2X(IiZiSwap.SwapParams memory params) internal returns (uint256) {
     address tokenX =  params.tokenX;
     address tokenY = params.tokenY;
     uint256 amount = params.amount;
@@ -122,7 +122,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
     address recipient,
     uint256 amountIn,
     uint256 deadline
-  ) internal onlyOwner returns (uint256){
+  ) internal returns (uint256){
     uint256 amountOut;
 
     if (tokenIn < tokenOut) {
@@ -161,7 +161,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
     address[] memory path,
     address to,
     uint deadline
-  ) internal onlyOwner returns (uint256){
+  ) internal returns (uint256){
     uint256[] memory amountOuts;
 
     // if use native token to swap
@@ -218,7 +218,9 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
     uint256 amountInA;
 
     // minimum return ratio of tokenA
-    int24 minReturn;
+    uint256 minReturnA;
+    uint256 minReturnB;
+    uint256 minReturnC;
 
     // swap deadline
     uint256 deadline;
@@ -238,8 +240,9 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
     uint24 fee,
     address recipient,
     uint256 amountIn,
+    uint256 minReturn,
     uint256 deadline
-  ) internal onlyOwner returns (uint256) {
+  ) internal returns (uint256) {
     uint256 amountOut;
 
     if (dex == izumiSwap.factory()) {
@@ -251,6 +254,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
         amountIn,
         deadline
       );
+      require(amountOut >= minReturn, "MRE");
     } else if (dex == biswapRouter02.factory()) {
       address[] memory path= new address[](2);
       path[0] = tokenIn;
@@ -263,14 +267,16 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
         recipient,
         deadline
       );
+      require(amountOut >= minReturn, "MRE");
     } else if (dex == address(0)) {
       amountOut = amountIn;
+      require(amountOut >= minReturn, "MRE");
     }
 
     return amountOut;
   }
 
-  function deltaSwap (DeltaSwapParams memory params) internal onlyOwner returns (uint256) {
+  function deltaSwap (DeltaSwapParams memory params) internal returns (uint256) {
     // swap tokenA for tokenB
     uint256 amountOutB = swapByDex(
       params.dexAB,
@@ -279,6 +285,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
       params.feeAB,
       params.recipient,
       params.amountInA,
+      params.minReturnB,
       params.deadline
     );
 
@@ -290,6 +297,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
       params.feeBC,
       params.recipient,
       amountOutB,
+      params.minReturnC,
       params.deadline
     );
 
@@ -301,6 +309,7 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
       params.feeCA,
       params.recipient,
       amountOutC,
+      params.minReturnA,
       params.deadline
     );
 
@@ -329,7 +338,9 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
         feeCA: params.feeAB,
         recipient: params.recipient,
         amountInA: params.amountInA,
-        minReturn: params.minReturn,
+        minReturnA: params.minReturnA,
+        minReturnB: params.minReturnC,
+        minReturnC: params.minReturnB,
         deadline: params.deadline,
         clockWise: params.clockWise,
         blockNumber: params.blockNumber
@@ -339,7 +350,6 @@ contract IzumiAndBiswapDeltaTaker is Ownable {
 
     int256 amountADelta = amountOutA.toInt256() - params.amountInA.toInt256();
     emit ArbitrageResult(params.tokenA, params.amountInA, amountADelta);
-    require(amountADelta >= params.amountInA.toInt256() * params.minReturn / 1e6, "MRE");
     
     return amountADelta;
   }
